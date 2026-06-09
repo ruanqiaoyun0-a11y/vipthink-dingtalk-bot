@@ -1,0 +1,20 @@
+{
+  "name": "vipthink-training",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install:frontend": "cd frontend && npm install",
+    "install:api": "npm install --prefix . && npm install pg jsonwebtoken bcrypt cors",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run install:frontend && npm run build:frontend",
+    "dev": "cd frontend && npm run dev",
+    "seed": "node scripts/seed-db.js",
+    "init-db": "node scripts/init-db.js"
+  },
+  "dependencies": {
+    "pg": "^8.12.0",
+    "jsonwebtoken": "^9.0.2",
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5"
+  }
+}

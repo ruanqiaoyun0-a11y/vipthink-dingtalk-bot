@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300">
+  <defs>
+    <linearGradient id="greenGrad" x1="205" y1="45" x2="205" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#84cc16"/>
+      <stop offset="1" stop-color="#10b981"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#10b981" stroke-width="3" fill="#10b981">
+    <path d="M 150 65 Q 200 65 200 120 Q 200 155 215 180" stroke-linecap="round" fill="none" stroke-width="14"/>
+    <ellipse cx="195" cy="108" rx="11" ry="18" fill="#10b981"/>
+    <circle cx="198" cy="104" r="2.5" fill="white"/>
+    <circle cx="206" cy="104" r="2" fill="white"/>
+  </g>
+  <path d="M 55 170 Q 55 70 150 70 Q 245 70 245 170 Q 245 215 230 220 L 70 220 Q 55 215 55 170 Z" stroke="#10b981" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <ellipse cx="120" cy="155" rx="24" ry="40" fill="#10b981"/>
+  <ellipse cx="180" cy="155" rx="24" ry="40" fill="#10b981"/>
+  <circle cx="123" cy="145" r="6" fill="white"/>
+  <circle cx="183" cy="145" r="5" fill="white"/>
+  <ellipse cx="95" cy="180" rx="22" ry="12" fill="#fbbf24"/>
+  <ellipse cx="205" cy="180" rx="22" ry="12" fill="#fbbf24"/>
+  <path d="M 115 200 Q 150 220 185 200" stroke="#10b981" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="bold">
+    <text x="20" y="270" font-size="60" fill="#10b981">VIP </text>
+    <g>
+      <path d="M 125 235 L 145 235 L 145 270 Q 145 260 155 258 Q 165 260 165 270 L 165 235 L 185 235 L 185 270 Q 185 260 195 258 Q 205 260 205 270 L 205 235 L 225 235 L 225 275 Q 225 295 205 295 L 145 295 L 145 275 L 125 275 Z" fill="url(#greenGrad)"/>
+      <path d="M 155 225 Q 155 245 175 245 Q 195 245 195 225 Q 195 225 190 230 Q 190 230 180 230 Q 175 225 170 230 Q 160 230 160 225 Q 160 220 165 220 Q 170 220 175 225 Z" fill="#84cc16"/>
+    </g>
+    <text x="215" y="270" font-size="60" fill="#10b981">THINK</text>
+  </g>
+</svg>
