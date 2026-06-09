@@ -26,6 +26,7 @@ export interface Question {
 export interface LearningRecord {
   day: number;
   practiceCount: number;
+  practicegroups?: number;
   examScore: number;
   completed: boolean;
   updatedAt: string;

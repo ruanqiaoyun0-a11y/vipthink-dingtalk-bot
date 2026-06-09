@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getQuestionsByDayAndType, submitExam } from '../services/api';
 import { Question, ExamAnswer, ExamResult } from '../types';
-import { ArrowLeft, CheckCircle, XCircle, Send, Trophy, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, Send, Trophy, AlertCircle, Lock } from 'lucide-react';
 
 export const Exam = () => {
   const { day } = useParams<{ day: string }>();
@@ -12,8 +12,10 @@ export const Exam = () => {
   const [result, setResult] = useState<ExamResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [blocked, setBlocked] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState('');
   const navigate = useNavigate();
-  
+
   const dayNum = parseInt(day || '1');
 
   useEffect(() => {
@@ -23,8 +25,12 @@ export const Exam = () => {
         if (response.success) {
           setQuestions(response.data);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('获取题目失败:', error);
+        if (error?.status === 403 || error?.data?.message?.includes('至少完成')) {
+          setBlocked(true);
+          setBlockedMessage(error?.data?.message || '至少完成3组练习才能参加考核');
+        }
       } finally {
         setLoading(false);
       }
@@ -49,7 +55,7 @@ export const Exam = () => {
         questionId: q.id,
         answer: answers[q.id],
       }));
-      
+
       const response = await submitExam(dayNum, examAnswers);
       if (response.success) {
         setResult(response.data);
@@ -72,19 +78,47 @@ export const Exam = () => {
     );
   }
 
+  if (blocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="card text-center max-w-md">
+          <div className="w-20 h-20 mx-auto mb-4 bg-amber-100 rounded-full flex items-center justify-center">
+            <Lock className="w-10 h-10 text-amber-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">考核未解锁</h2>
+          <p className="text-gray-600 mb-6">{blockedMessage}</p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => navigate(`/practice/${dayNum}`)}
+              className="btn-primary"
+            >
+              完成练习
+            </button>
+            <button
+              onClick={() => navigate('/')}
+              className="btn-secondary"
+            >
+              返回首页
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-4">
           <button
-            onClick={() => navigate(`/learn/${dayNum}`)}
+            onClick={() => navigate(`/practice/${dayNum}`)}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">第{dayNum}天 - 考核测试</h1>
-            <p className="text-sm text-gray-500">共{questions.length}道题目，60分及格</p>
+            <h1 className="text-lg font-bold text-gray-800">DAY{dayNum} · 综合考核</h1>
+            <p className="text-sm text-gray-500">共{questions.length}题 · 每题5分 · 满分100分 · 60分及格</p>
           </div>
         </div>
       </header>
@@ -96,7 +130,7 @@ export const Exam = () => {
               <AlertCircle className="w-6 h-6 text-warning flex-shrink-0" />
               <div>
                 <h3 className="font-medium text-warning">考核须知</h3>
-                <p className="text-sm text-gray-600">请认真作答，考核成绩将记录在案。60分及以上为及格，不及格可重新考核。</p>
+                <p className="text-sm text-gray-600">请认真作答，考核成绩将记录在案。每题5分，60分及以上为及格，不及格可重新考核。</p>
               </div>
             </div>
           </div>
@@ -105,8 +139,8 @@ export const Exam = () => {
         <div className="space-y-6">
           {questions.map((question, index) => {
             const selectedAnswer = answers[question.id];
-            const isCorrect = submitted && result?.results.find(r => r.questionId === question.id)?.isCorrect;
-            
+            const isCorrect = submitted && result?.results?.find(r => r.questionId === question.id)?.isCorrect;
+
             return (
               <div key={question.id} className="card">
                 <div className="flex items-start gap-3 mb-4">
@@ -126,13 +160,13 @@ export const Exam = () => {
                     </div>
                   )}
                 </div>
-                
+
                 <div className="space-y-3 pl-11">
                   {question.options.map((option, optIndex) => {
                     const isSelected = selectedAnswer === optIndex;
                     const isCorrectAnswer = question.answer === optIndex;
                     let optionClass = 'border-gray-200 hover:border-green-300 hover:bg-green-50';
-                    
+
                     if (submitted) {
                       if (isCorrectAnswer) {
                         optionClass = 'border-success bg-success/10';
@@ -144,7 +178,7 @@ export const Exam = () => {
                     } else if (isSelected) {
                       optionClass = 'border-green-500 bg-green-50';
                     }
-                    
+
                     return (
                       <button
                         key={optIndex}
@@ -187,39 +221,32 @@ export const Exam = () => {
             </button>
           </div>
         ) : (
-          <div className={`mt-8 card ${result?.completed ? 'bg-success/5' : 'bg-danger/5'}`}>
+          <div className={`mt-8 card ${result?.passed ? 'bg-success/5' : 'bg-danger/5'}`}>
             <div className="text-center">
-              <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${result?.completed ? 'bg-success' : 'bg-danger'}`}>
-                {result?.completed ? (
+              <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center ${result?.passed ? 'bg-success' : 'bg-danger'}`}>
+                {result?.passed ? (
                   <Trophy className="w-10 h-10 text-white" />
                 ) : (
                   <AlertCircle className="w-10 h-10 text-white" />
                 )}
               </div>
-              <div className={`text-4xl font-bold mb-2 ${result?.completed ? 'text-success' : 'text-danger'}`}>
+              <div className={`text-4xl font-bold mb-2 ${result?.passed ? 'text-success' : 'text-danger'}`}>
                 {result?.score}分
               </div>
               <p className="text-gray-600 mb-4">
-                答对{result?.correctCount}题，共{result?.totalCount}题
+                答对{result?.correct}题，共{result?.total}题
               </p>
-              <p className={`font-medium mb-6 ${result?.completed ? 'text-success' : 'text-danger'}`}>
-                {result?.completed ? '恭喜！考核通过！' : '未达到及格分数，请重新学习后重试'}
+              <p className={`font-medium mb-6 ${result?.passed ? 'text-success' : 'text-danger'}`}>
+                {result?.passed ? '恭喜！考核通过！' : '未达到及格分数，请重新学习后重试'}
               </p>
-              <div className="flex gap-4 justify-center">
+              <div className="flex gap-4 justify-center flex-wrap">
                 <button
-                  onClick={() => navigate(`/learn/${dayNum}`)}
-                  className="btn-secondary"
+                  onClick={() => navigate('/')}
+                  className="btn-primary"
                 >
-                  返回学习
+                  返回首页
                 </button>
-                {result?.completed ? (
-                  <button
-                    onClick={() => navigate('/')}
-                    className="btn-primary"
-                  >
-                    返回首页
-                  </button>
-                ) : (
+                {!result?.passed && (
                   <button
                     onClick={() => {
                       setSubmitted(false);

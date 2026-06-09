@@ -98,9 +98,22 @@ async function initTables() {
       userId INTEGER NOT NULL,
       day INTEGER NOT NULL,
       practiceCount INTEGER DEFAULT 0,
+      practiceGroups INTEGER DEFAULT 0,
       examScore INTEGER DEFAULT 0,
       completed INTEGER DEFAULT 0,
       updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    )`);
+
+    await query(`CREATE TABLE IF NOT EXISTS practice_sessions (
+      id SERIAL PRIMARY KEY,
+      userId INTEGER NOT NULL,
+      day INTEGER NOT NULL,
+      groupIndex INTEGER NOT NULL,
+      totalQuestions INTEGER DEFAULT 10,
+      correctCount INTEGER DEFAULT 0,
+      score INTEGER DEFAULT 0,
+      createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (userId) REFERENCES users(id)
     )`);
 
@@ -212,33 +225,94 @@ module.exports = async (req, res) => {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const day = parseInt(questionsMatch[1], 10);
       const type = questionsMatch[2];
-      const rows = await getMany('SELECT id, day, type, question, options, answer, explanation FROM questions WHERE day = $1 AND type = $2 ORDER BY id', [day, type]);
-      return sendJson(res, 200, { success: true, data: rows });
+      const allRows = await getMany('SELECT id, day, type, question, options, answer, explanation FROM questions WHERE day = $1 AND type = $2 ORDER BY id', [day, type]);
+
+      if (type === 'practice') {
+        const sessionRows = await getMany('SELECT groupindex, totalquestions, correctcount, score FROM practice_sessions WHERE userid = $1 AND day = $2 ORDER BY groupindex', [user.id, day]);
+        const completedGroups = sessionRows.length;
+        const startIdx = completedGroups * 10;
+        const groupQuestions = allRows.slice(startIdx, startIdx + 10);
+        const canStartExam = completedGroups >= 3;
+        return sendJson(res, 200, {
+          success: true,
+          data: groupQuestions,
+          meta: {
+            groupIndex: completedGroups + 1,
+            totalGroups: Math.ceil(allRows.length / 10),
+            completedGroups: completedGroups,
+            canStartExam: canStartExam,
+            previousScores: sessionRows.map((r, i) => ({ group: i + 1, score: r.score, correct: r.correctcount, total: r.totalquestions })),
+          },
+        });
+      }
+
+      if (type === 'exam') {
+        const sessionRows = await getMany('SELECT groupindex FROM practice_sessions WHERE userid = $1 AND day = $2', [user.id, day]);
+        if (sessionRows.length < 3) {
+          return sendJson(res, 403, { success: false, message: `至少完成3组练习才能参加考核，当前已完成${sessionRows.length}组` });
+        }
+        const examRows = allRows.slice(0, 20);
+        return sendJson(res, 200, {
+          success: true,
+          data: examRows,
+          meta: {
+            totalQuestions: examRows.length,
+            perQuestionScore: 5,
+            passingScore: 60,
+          },
+        });
+      }
     }
 
     if (path === '/practice' && req.method === 'POST') {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const { day, answers } = req.body || {};
       const d = parseInt(day, 10);
-      const questions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'practice' ORDER BY id", [d]);
-      if (questions.length === 0) return sendJson(res, 400, { success: false, message: '该天暂无练习题' });
+
+      const sessionRows = await getMany('SELECT groupindex FROM practice_sessions WHERE userid = $1 AND day = $2 ORDER BY groupindex', [user.id, d]);
+      const completedGroups = sessionRows.length;
+      const startIdx = completedGroups * 10;
+
+      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'practice' ORDER BY id", [d]);
+      const groupQuestions = allQuestions.slice(startIdx, startIdx + 10);
+
+      if (groupQuestions.length === 0) {
+        return sendJson(res, 400, { success: false, message: '该天暂无更多练习题' });
+      }
+
       let correct = 0;
       const map = {};
-      for (const q of questions) map[q.id] = q.answer;
+      for (const q of groupQuestions) map[q.id] = q.answer;
       for (const a of answers || []) {
         if (map[a.questionId] === a.answer) correct++;
       }
-      const total = questions.length;
-      const score = Math.round((correct / total) * 100);
+      const total = groupQuestions.length;
+      const score = correct * 10;
+
+      const groupIndex = completedGroups + 1;
+      await query('INSERT INTO practice_sessions (userid, day, groupindex, totalquestions, correctcount, score) VALUES ($1, $2, $3, $4, $5, $6)', [user.id, d, groupIndex, total, correct, score]);
+
       const existing = await getOne('SELECT id FROM learning_records WHERE userid = $1 AND day = $2', [user.id, d]);
       if (existing) {
-        await query('UPDATE learning_records SET practicecount = practicecount + 1, updatedat = NOW() WHERE id = $1', [existing.id]);
+        await query('UPDATE learning_records SET practicecount = practicecount + 1, practicegroups = practicegroups + 1, updatedat = NOW() WHERE id = $1', [existing.id]);
       } else {
-        await query('INSERT INTO learning_records (userid, day, practicecount, examscore, completed) VALUES ($1, $2, 1, 0, 0)', [user.id, d]);
+        await query('INSERT INTO learning_records (userid, day, practicecount, practicegroups, examscore, completed) VALUES ($1, $2, 1, 1, 0, 0)', [user.id, d]);
       }
+
+      const newCompletedGroups = groupIndex;
+      const canStartExam = newCompletedGroups >= 3;
+
       return sendJson(res, 200, {
         success: true,
-        data: { total, correct, score, percentage: score, message: `答对 ${correct}/${total} 题，得分 ${score} 分` },
+        data: {
+          total,
+          correct,
+          score,
+          groupIndex,
+          canStartExam,
+          hasMoreQuestions: (startIdx + 10) < allQuestions.length,
+          message: `第${groupIndex}组练习完成，答对 ${correct}/${total} 题，得分 ${score} 分`,
+        },
       });
     }
 
@@ -246,24 +320,26 @@ module.exports = async (req, res) => {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const { day, answers } = req.body || {};
       const d = parseInt(day, 10);
-      const questions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'exam' ORDER BY id", [d]);
+      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'exam' ORDER BY id", [d]);
+      const examQuestions = allQuestions.slice(0, 20);
       let correct = 0;
       const map = {};
-      for (const q of questions) map[q.id] = q.answer;
+      for (const q of examQuestions) map[q.id] = q.answer;
       for (const a of answers || []) {
         if (map[a.questionId] === a.answer) correct++;
       }
-      const total = questions.length || 1;
-      const score = Math.round((correct / total) * 100);
+      const total = examQuestions.length;
+      const score = correct * 5;
+      const passed = score >= 60;
       const existing = await getOne('SELECT id FROM learning_records WHERE userid = $1 AND day = $2', [user.id, d]);
       if (existing) {
-        await query('UPDATE learning_records SET examscore = $1, completed = 1, updatedat = NOW() WHERE id = $2', [score, existing.id]);
+        await query('UPDATE learning_records SET examscore = $1, completed = $2, updatedat = NOW() WHERE id = $3', [score, passed ? 1 : 0, existing.id]);
       } else {
-        await query('INSERT INTO learning_records (userid, day, practicecount, examscore, completed) VALUES ($1, $2, 0, $3, 1)', [user.id, d, score]);
+        await query('INSERT INTO learning_records (userid, day, practicecount, practicegroups, examscore, completed) VALUES ($1, $2, 0, 0, $3, $4)', [user.id, d, score, passed ? 1 : 0]);
       }
       return sendJson(res, 200, {
         success: true,
-        data: { total, correct, score, percentage: score, passed: score >= 60, message: score >= 60 ? `通过考核，得分 ${score} 分` : `未通过，得分 ${score} 分，需要达到 60 分` },
+        data: { total, correct, score, passed, message: passed ? `通过考核，得分 ${score} 分` : `未通过，得分 ${score} 分，需要达到 60 分` },
       });
     }
 
