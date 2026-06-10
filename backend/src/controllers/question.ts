@@ -12,6 +12,16 @@ interface Question {
   explanation: string;
 }
 
+function shuffleOptions(options: string[], correctAnswer: number): { options: string[]; newAnswerIndex: number } {
+  const shuffled = [...options];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const newAnswerIndex = shuffled.indexOf(options[correctAnswer]);
+  return { options: shuffled, newAnswerIndex };
+}
+
 export const getQuestionsByDayAndType = async (req: AuthRequest, res: Response) => {
   try {
     const day = parseInt(req.params.day);
@@ -38,32 +48,43 @@ export const getQuestionsByDayAndType = async (req: AuthRequest, res: Response) 
           const completedGroups = sessionRows.length;
           const startIdx = completedGroups * 10;
           let groupQuestions = allRows.slice(startIdx, startIdx + 10);
-          if (groupQuestions.length === 0 && allRows.length >= 10) {
-            const wrapIdx = (completedGroups * 10) % allRows.length;
-            groupQuestions = allRows.slice(wrapIdx, wrapIdx + 10);
-            if (groupQuestions.length < 10) {
-              groupQuestions = [...groupQuestions, ...allRows.slice(0, 10 - groupQuestions.length)];
-            }
+          
+          if (groupQuestions.length < 10 && allRows.length > 0) {
+            const wrapCount = 10 - groupQuestions.length;
+            groupQuestions = [...groupQuestions, ...allRows.slice(0, wrapCount)];
           }
+          
           const canStartExam = completedGroups >= 3;
 
-          return res.json({
-            success: true,
-            data: groupQuestions.map(q => ({
+          const processedQuestions = groupQuestions.map(q => {
+            const options = JSON.parse(q.options);
+            const { options: shuffledOptions, newAnswerIndex } = shuffleOptions(options, q.answer);
+            return {
               id: q.id.toString(),
               day: q.day,
               type: q.type,
               question: q.question,
-              options: JSON.parse(q.options),
-              answer: q.answer,
+              options: shuffledOptions,
+              answer: newAnswerIndex,
               explanation: q.explanation,
-            })),
+              originalAnswer: q.answer,
+            };
+          });
+
+          return res.json({
+            success: true,
+            data: processedQuestions,
             meta: {
               groupIndex: completedGroups + 1,
               totalGroups: Math.max(3, Math.ceil(allRows.length / 10)),
               completedGroups: completedGroups,
               canStartExam: canStartExam,
-              previousScores: sessionRows.map((r, i) => ({ group: i + 1, score: r.score, correct: r.correctcount, total: r.totalquestions })),
+              previousScores: sessionRows.map((r: any, i: number) => ({ 
+                group: i + 1, 
+                score: r.score, 
+                correct: r.correctCount, 
+                total: r.totalQuestions 
+              })),
             },
           });
         }
@@ -79,24 +100,31 @@ export const getQuestionsByDayAndType = async (req: AuthRequest, res: Response) 
             if (sessionRows.length < 3) {
               return res.status(403).json({ success: false, message: `至少完成3组练习才能参加考核，当前已完成${sessionRows.length}组` });
             }
-            let examRows = allRows.slice(0, 20);
-            if (examRows.length < 20) {
-              examRows = allRows;
+            let examQuestions = allRows.slice(0, 20);
+            if (examQuestions.length < 20) {
+              examQuestions = allRows;
             }
-            return res.json({
-              success: true,
-              data: examRows.map(q => ({
+
+            const processedQuestions = examQuestions.map(q => {
+              const options = JSON.parse(q.options);
+              const { options: shuffledOptions, newAnswerIndex } = shuffleOptions(options, q.answer);
+              return {
                 id: q.id.toString(),
                 day: q.day,
                 type: q.type,
                 question: q.question,
-                options: JSON.parse(q.options),
-                answer: q.answer,
+                options: shuffledOptions,
+                answer: newAnswerIndex,
                 explanation: q.explanation,
-              })),
+              };
+            });
+
+            return res.json({
+              success: true,
+              data: processedQuestions,
               meta: {
-                totalQuestions: examRows.length,
-                perQuestionScore: Math.floor(100 / examRows.length),
+                totalQuestions: processedQuestions.length,
+                perQuestionScore: Math.floor(100 / processedQuestions.length),
                 passingScore: 60,
               },
             });

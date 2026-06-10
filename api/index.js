@@ -220,6 +220,20 @@ module.exports = async (req, res) => {
       return sendJson(res, 200, { success: true, data: rows });
     }
 
+    function shuffleOptions(options, seed) {
+      const shuffled = [...options];
+      let s = seed;
+      const random = () => {
+        s = (s * 9301 + 49297) % 233280;
+        return s / 233280;
+      };
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+
     const questionsMatch = path.match(/\/questions\/(\d+)\/(practice|exam)/);
     if (questionsMatch && req.method === 'GET') {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
@@ -232,17 +246,26 @@ module.exports = async (req, res) => {
         const completedGroups = sessionRows.length;
         const startIdx = completedGroups * 10;
         let groupQuestions = allRows.slice(startIdx, startIdx + 10);
-        if (groupQuestions.length === 0 && allRows.length >= 10) {
-          const wrapIdx = (completedGroups * 10) % allRows.length;
-          groupQuestions = allRows.slice(wrapIdx, wrapIdx + 10);
-          if (groupQuestions.length < 10) {
-            groupQuestions = [...groupQuestions, ...allRows.slice(0, 10 - groupQuestions.length)];
-          }
+        if (groupQuestions.length < 10 && allRows.length > 0) {
+          const wrapCount = 10 - groupQuestions.length;
+          groupQuestions = [...groupQuestions, ...allRows.slice(0, wrapCount)];
         }
+        
+        const processedQuestions = groupQuestions.map(q => {
+          const options = JSON.parse(q.options);
+          const shuffledOptions = shuffleOptions(options, q.id);
+          const newAnswerIndex = shuffledOptions.indexOf(options[q.answer]);
+          return {
+            ...q,
+            options: shuffledOptions,
+            answer: newAnswerIndex,
+          };
+        });
+
         const canStartExam = completedGroups >= 3;
         return sendJson(res, 200, {
           success: true,
-          data: groupQuestions,
+          data: processedQuestions,
           meta: {
             groupIndex: completedGroups + 1,
             totalGroups: Math.max(3, Math.ceil(allRows.length / 10)),
@@ -262,12 +285,24 @@ module.exports = async (req, res) => {
         if (examRows.length < 20) {
           examRows = allRows;
         }
+        
+        const processedExamRows = examRows.map(q => {
+          const options = JSON.parse(q.options);
+          const shuffledOptions = shuffleOptions(options, q.id);
+          const newAnswerIndex = shuffledOptions.indexOf(options[q.answer]);
+          return {
+            ...q,
+            options: shuffledOptions,
+            answer: newAnswerIndex,
+          };
+        });
+
         return sendJson(res, 200, {
           success: true,
-          data: examRows,
+          data: processedExamRows,
           meta: {
-            totalQuestions: examRows.length,
-            perQuestionScore: Math.floor(100 / examRows.length),
+            totalQuestions: processedExamRows.length,
+            perQuestionScore: Math.floor(100 / processedExamRows.length),
             passingScore: 60,
           },
         });
@@ -283,14 +318,11 @@ module.exports = async (req, res) => {
       const completedGroups = sessionRows.length;
       const startIdx = completedGroups * 10;
 
-      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
+      const allQuestions = await getMany("SELECT id, options, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
       let groupQuestions = allQuestions.slice(startIdx, startIdx + 10);
-      if (groupQuestions.length === 0 && allQuestions.length >= 10) {
-        const wrapIdx = (completedGroups * 10) % allQuestions.length;
-        groupQuestions = allQuestions.slice(wrapIdx, wrapIdx + 10);
-        if (groupQuestions.length < 10) {
-          groupQuestions = [...groupQuestions, ...allQuestions.slice(0, 10 - groupQuestions.length)];
-        }
+      if (groupQuestions.length < 10 && allQuestions.length > 0) {
+        const wrapCount = 10 - groupQuestions.length;
+        groupQuestions = [...groupQuestions, ...allQuestions.slice(0, wrapCount)];
       }
 
       if (groupQuestions.length === 0) {
@@ -298,10 +330,13 @@ module.exports = async (req, res) => {
       }
 
       let correct = 0;
-      const map = {};
-      for (const q of groupQuestions) map[q.id] = q.answer;
       for (const a of answers || []) {
-        if (map[a.questionId] === a.answer) correct++;
+        const q = groupQuestions.find(item => item.id === parseInt(a.questionId));
+        if (!q) continue;
+        const options = JSON.parse(q.options);
+        const shuffledOptions = shuffleOptions(options, q.id);
+        const correctAnswerIndex = shuffledOptions.indexOf(options[q.answer]);
+        if (correctAnswerIndex === a.answer) correct++;
       }
       const total = groupQuestions.length;
       const score = correct * 10;
@@ -337,16 +372,19 @@ module.exports = async (req, res) => {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const { day, answers } = req.body || {};
       const d = parseInt(day, 10);
-      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
+      const allQuestions = await getMany("SELECT id, options, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
       let examQuestions = allQuestions.slice(0, 20);
       if (examQuestions.length < 20) {
         examQuestions = allQuestions;
       }
       let correct = 0;
-      const map = {};
-      for (const q of examQuestions) map[q.id] = q.answer;
       for (const a of answers || []) {
-        if (map[a.questionId] === a.answer) correct++;
+        const q = examQuestions.find(item => item.id === parseInt(a.questionId));
+        if (!q) continue;
+        const options = JSON.parse(q.options);
+        const shuffledOptions = shuffleOptions(options, q.id);
+        const correctAnswerIndex = shuffledOptions.indexOf(options[q.answer]);
+        if (correctAnswerIndex === a.answer) correct++;
       }
       const total = examQuestions.length;
       const perQ = Math.floor(100 / total);

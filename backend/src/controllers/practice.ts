@@ -12,6 +12,20 @@ interface Question {
   explanation: string;
 }
 
+function shuffleOptions(options: string[], seed: number): { options: string[]; newAnswerIndex: number } {
+  const shuffled = [...options];
+  let s = seed;
+  const random = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return { options: shuffled, newAnswerIndex: -1 };
+}
+
 export const submitPractice = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
@@ -34,12 +48,9 @@ export const submitPractice = async (req: AuthRequest, res: Response) => {
         }
 
         let groupQuestions = allQuestions.slice(startIdx, startIdx + 10);
-        if (groupQuestions.length === 0 && allQuestions.length >= 10) {
-          const wrapIdx = (completedGroups * 10) % allQuestions.length;
-          groupQuestions = allQuestions.slice(wrapIdx, wrapIdx + 10);
-          if (groupQuestions.length < 10) {
-            groupQuestions = [...groupQuestions, ...allQuestions.slice(0, 10 - groupQuestions.length)];
-          }
+        if (groupQuestions.length < 10 && allQuestions.length > 0) {
+          const wrapCount = 10 - groupQuestions.length;
+          groupQuestions = [...groupQuestions, ...allQuestions.slice(0, wrapCount)];
         }
 
         if (groupQuestions.length === 0) {
@@ -50,13 +61,20 @@ export const submitPractice = async (req: AuthRequest, res: Response) => {
         const results = answers.map((answer: { questionId: string; answer: number }) => {
           const question = groupQuestions.find(q => q.id.toString() === answer.questionId);
           if (!question) return null;
-          const userAnswer = answer.answer;
-          const isCorrect = userAnswer === question.answer;
+          
+          const options = JSON.parse(question.options);
+          const seed = parseInt(question.id.toString());
+          const { options: shuffledOptions } = shuffleOptions(options, seed);
+          
+          const userAnswerIndex = answer.answer;
+          const correctAnswerIndex = shuffledOptions.indexOf(options[question.answer]);
+          const isCorrect = userAnswerIndex === correctAnswerIndex;
+          
           if (isCorrect) correctCount++;
           return {
             questionId: question.id.toString(),
-            userAnswer,
-            correctAnswer: question.answer,
+            userAnswer: userAnswerIndex,
+            correctAnswer: correctAnswerIndex,
             isCorrect,
           };
         }).filter(Boolean);
