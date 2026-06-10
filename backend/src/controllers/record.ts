@@ -7,6 +7,7 @@ interface LearningRecord {
   userId: number;
   day: number;
   practiceCount: number;
+  practiceGroups?: number;
   examScore: number;
   completed: number;
   updatedAt: string;
@@ -15,18 +16,19 @@ interface LearningRecord {
 export const getRecords = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    
+
     db.all('SELECT * FROM learning_records WHERE userId = ?', [userId], (err, rows: LearningRecord[]) => {
       if (err) {
         return res.status(500).json({ success: false, message: '数据库错误' });
       }
-      
+
       res.json({
         success: true,
         data: rows.map(record => ({
           id: record.id.toString(),
           day: record.day,
           practiceCount: record.practiceCount,
+          practicegroups: record.practiceGroups || 0,
           examScore: record.examScore,
           completed: record.completed === 1,
           updatedAt: record.updatedAt,

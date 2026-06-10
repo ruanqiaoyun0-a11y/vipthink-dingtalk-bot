@@ -225,20 +225,27 @@ module.exports = async (req, res) => {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const day = parseInt(questionsMatch[1], 10);
       const type = questionsMatch[2];
-      const allRows = await getMany('SELECT id, day, type, question, options, answer, explanation FROM questions WHERE day = $1 AND type = $2 ORDER BY id', [day, type]);
+      const allRows = await getMany('SELECT id, day, type, question, options, answer, explanation FROM questions WHERE day = $1 ORDER BY id', [day]);
 
       if (type === 'practice') {
         const sessionRows = await getMany('SELECT groupindex, totalquestions, correctcount, score FROM practice_sessions WHERE userid = $1 AND day = $2 ORDER BY groupindex', [user.id, day]);
         const completedGroups = sessionRows.length;
         const startIdx = completedGroups * 10;
-        const groupQuestions = allRows.slice(startIdx, startIdx + 10);
+        let groupQuestions = allRows.slice(startIdx, startIdx + 10);
+        if (groupQuestions.length === 0 && allRows.length >= 10) {
+          const wrapIdx = (completedGroups * 10) % allRows.length;
+          groupQuestions = allRows.slice(wrapIdx, wrapIdx + 10);
+          if (groupQuestions.length < 10) {
+            groupQuestions = [...groupQuestions, ...allRows.slice(0, 10 - groupQuestions.length)];
+          }
+        }
         const canStartExam = completedGroups >= 3;
         return sendJson(res, 200, {
           success: true,
           data: groupQuestions,
           meta: {
             groupIndex: completedGroups + 1,
-            totalGroups: Math.ceil(allRows.length / 10),
+            totalGroups: Math.max(3, Math.ceil(allRows.length / 10)),
             completedGroups: completedGroups,
             canStartExam: canStartExam,
             previousScores: sessionRows.map((r, i) => ({ group: i + 1, score: r.score, correct: r.correctcount, total: r.totalquestions })),
@@ -251,13 +258,16 @@ module.exports = async (req, res) => {
         if (sessionRows.length < 3) {
           return sendJson(res, 403, { success: false, message: `至少完成3组练习才能参加考核，当前已完成${sessionRows.length}组` });
         }
-        const examRows = allRows.slice(0, 20);
+        let examRows = allRows.slice(0, 20);
+        if (examRows.length < 20) {
+          examRows = allRows;
+        }
         return sendJson(res, 200, {
           success: true,
           data: examRows,
           meta: {
             totalQuestions: examRows.length,
-            perQuestionScore: 5,
+            perQuestionScore: Math.floor(100 / examRows.length),
             passingScore: 60,
           },
         });
@@ -273,11 +283,18 @@ module.exports = async (req, res) => {
       const completedGroups = sessionRows.length;
       const startIdx = completedGroups * 10;
 
-      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'practice' ORDER BY id", [d]);
-      const groupQuestions = allQuestions.slice(startIdx, startIdx + 10);
+      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
+      let groupQuestions = allQuestions.slice(startIdx, startIdx + 10);
+      if (groupQuestions.length === 0 && allQuestions.length >= 10) {
+        const wrapIdx = (completedGroups * 10) % allQuestions.length;
+        groupQuestions = allQuestions.slice(wrapIdx, wrapIdx + 10);
+        if (groupQuestions.length < 10) {
+          groupQuestions = [...groupQuestions, ...allQuestions.slice(0, 10 - groupQuestions.length)];
+        }
+      }
 
       if (groupQuestions.length === 0) {
-        return sendJson(res, 400, { success: false, message: '该天暂无更多练习题' });
+        return sendJson(res, 400, { success: false, message: '该天暂无练习题' });
       }
 
       let correct = 0;
@@ -310,7 +327,7 @@ module.exports = async (req, res) => {
           score,
           groupIndex,
           canStartExam,
-          hasMoreQuestions: (startIdx + 10) < allQuestions.length,
+          hasMoreQuestions: true,
           message: `第${groupIndex}组练习完成，答对 ${correct}/${total} 题，得分 ${score} 分`,
         },
       });
@@ -320,8 +337,11 @@ module.exports = async (req, res) => {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
       const { day, answers } = req.body || {};
       const d = parseInt(day, 10);
-      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 AND type = 'exam' ORDER BY id", [d]);
-      const examQuestions = allQuestions.slice(0, 20);
+      const allQuestions = await getMany("SELECT id, answer FROM questions WHERE day = $1 ORDER BY id", [d]);
+      let examQuestions = allQuestions.slice(0, 20);
+      if (examQuestions.length < 20) {
+        examQuestions = allQuestions;
+      }
       let correct = 0;
       const map = {};
       for (const q of examQuestions) map[q.id] = q.answer;
@@ -329,7 +349,8 @@ module.exports = async (req, res) => {
         if (map[a.questionId] === a.answer) correct++;
       }
       const total = examQuestions.length;
-      const score = correct * 5;
+      const perQ = Math.floor(100 / total);
+      const score = correct * perQ;
       const passed = score >= 60;
       const existing = await getOne('SELECT id FROM learning_records WHERE userid = $1 AND day = $2', [user.id, d]);
       if (existing) {
@@ -357,7 +378,7 @@ module.exports = async (req, res) => {
 
     if (path === '/records' && req.method === 'GET') {
       if (!user) return sendJson(res, 401, { success: false, message: '未登录' });
-      const rows = await getMany('SELECT id, userid, day, practicecount, examscore, completed, updatedat FROM learning_records WHERE userid = $1 ORDER BY day', [user.id]);
+      const rows = await getMany('SELECT id, userid, day, practicecount, practicegroups, examscore, completed, updatedat FROM learning_records WHERE userid = $1 ORDER BY day', [user.id]);
       return sendJson(res, 200, { success: true, data: rows });
     }
 

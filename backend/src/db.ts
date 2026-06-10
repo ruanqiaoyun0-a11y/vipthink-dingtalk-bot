@@ -47,9 +47,24 @@ export const initDatabase = async (): Promise<void> => {
           userId INTEGER NOT NULL,
           day INTEGER NOT NULL,
           practiceCount INTEGER DEFAULT 0,
+          practiceGroups INTEGER DEFAULT 0,
           examScore INTEGER DEFAULT 0,
           completed INTEGER DEFAULT 0,
           updatedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (userId) REFERENCES users(id)
+        )
+      `);
+
+      db.run(`
+        CREATE TABLE IF NOT EXISTS practice_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          userId INTEGER NOT NULL,
+          day INTEGER NOT NULL,
+          groupIndex INTEGER NOT NULL,
+          totalQuestions INTEGER DEFAULT 10,
+          correctCount INTEGER DEFAULT 0,
+          score INTEGER DEFAULT 0,
+          createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (userId) REFERENCES users(id)
         )
       `);
