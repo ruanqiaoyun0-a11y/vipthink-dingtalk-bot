@@ -5,6 +5,7 @@ import { Home } from './pages/Home';
 import { Practice } from './pages/Practice';
 import { Exam } from './pages/Exam';
 import { Admin } from './pages/Admin';
+import { Demo } from './pages/Demo';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -31,6 +32,7 @@ function AppContent() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/demo" element={<Demo />} />
         <Route 
           path="/" 
           element={

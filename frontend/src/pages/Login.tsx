@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { login } from '../services/api';
-import { User, Lock, Eye, EyeOff, GraduationCap } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, GraduationCap, Play } from 'lucide-react';
 
 export const Login = () => {
   const [name, setName] = useState('');
@@ -106,6 +106,16 @@ export const Login = () => {
 
           <div className="mt-6 text-center text-gray-500 text-sm">
             <p>理论期共4天，完成每天的学习和考核</p>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <button
+              onClick={() => navigate('/demo')}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-indigo-700 transition-all"
+            >
+              <Play className="w-5 h-5" />
+              体验演示版（无需登录）
+            </button>
           </div>
         </div>
       </div>
