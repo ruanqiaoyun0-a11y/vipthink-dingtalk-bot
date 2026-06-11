@@ -12,10 +12,15 @@ interface Question {
   explanation: string;
 }
 
-function shuffleOptions(options: string[], correctAnswer: number): { options: string[]; newAnswerIndex: number } {
+function shuffleOptions(options: string[], correctAnswer: number, seed: number): { options: string[]; newAnswerIndex: number } {
   const shuffled = [...options];
+  let s = seed;
+  const random = () => {
+    s = (s * 9301 + 49297) % 233280;
+    return s / 233280;
+  };
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   const newAnswerIndex = shuffled.indexOf(options[correctAnswer]);
@@ -58,16 +63,14 @@ export const getQuestionsByDayAndType = async (req: AuthRequest, res: Response) 
 
           const processedQuestions = groupQuestions.map(q => {
             const options = JSON.parse(q.options);
-            const { options: shuffledOptions, newAnswerIndex } = shuffleOptions(options, q.answer);
             return {
               id: q.id.toString(),
               day: q.day,
               type: q.type,
               question: q.question,
-              options: shuffledOptions,
-              answer: newAnswerIndex,
+              options: options,
+              answer: q.answer,
               explanation: q.explanation,
-              originalAnswer: q.answer,
             };
           });
 
@@ -107,14 +110,13 @@ export const getQuestionsByDayAndType = async (req: AuthRequest, res: Response) 
 
             const processedQuestions = examQuestions.map(q => {
               const options = JSON.parse(q.options);
-              const { options: shuffledOptions, newAnswerIndex } = shuffleOptions(options, q.answer);
               return {
                 id: q.id.toString(),
                 day: q.day,
                 type: q.type,
                 question: q.question,
-                options: shuffledOptions,
-                answer: newAnswerIndex,
+                options: options,
+                answer: q.answer,
                 explanation: q.explanation,
               };
             });

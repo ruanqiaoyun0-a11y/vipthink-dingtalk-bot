@@ -15,6 +15,24 @@ axiosInstance.interceptors.request.use((config) => {
   return config;
 });
 
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      console.error('API Error:', error.response.status, error.response.data);
+      if (error.response.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    } else if (error.request) {
+      console.error('Network Error:', error.request);
+    } else {
+      console.error('Request Error:', error.message);
+    }
+    throw error;
+  }
+);
+
 export const login = async (name: string, password: string): Promise<{ success: boolean; data: User; token: string }> => {
   const response = await axiosInstance.post('/users/login', { name, password });
   return response.data;

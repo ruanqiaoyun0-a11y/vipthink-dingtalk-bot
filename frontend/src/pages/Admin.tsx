@@ -126,11 +126,11 @@ export const Admin = () => {
 
   const getOverallStats = () => {
     const totalStudents = users.filter(u => u.role === 'student').length;
-    const totalPractice = records.reduce((sum, r) => sum + (r.totalPracticeCount || 0), 0);
+    const totalPractice = records.reduce((sum, r) => sum + (r.practiceCount || 0), 0);
     const avgScore = records.length > 0 
-      ? Math.round(records.reduce((sum, r) => sum + (r.averageScore || 0), 0) / records.length)
+      ? Math.round(records.reduce((sum, r) => sum + (r.examScore || 0), 0) / records.length)
       : 0;
-    const completedDays = records.reduce((sum, r) => sum + (r.completedDays || 0), 0);
+    const completedDays = records.reduce((sum, r) => sum + (r.completed ? 1 : 0), 0);
     
     return { totalStudents, totalPractice, avgScore, completedDays };
   };
@@ -302,29 +302,50 @@ export const Admin = () => {
                   学员学习排行
                 </h2>
                 <div className="space-y-3">
-                  {records.slice(0, 5).map((record, index) => (
-                    <div key={record._id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                        index === 0 ? 'bg-yellow-400 text-white' :
-                        index === 1 ? 'bg-gray-300 text-white' :
-                        index === 2 ? 'bg-orange-400 text-white' :
-                        'bg-gray-100 text-gray-600'
-                      }`}>
-                        {index + 1}
+                  {(() => {
+                    const studentRecords = records.reduce((acc, record) => {
+                      const existing = acc.find(a => a.name === record.name);
+                      if (existing) {
+                        existing.practiceCount += record.practiceCount || 0;
+                        existing.examScore += record.examScore || 0;
+                        existing.totalDays++;
+                        if (record.completed) existing.completedDays++;
+                      } else {
+                        acc.push({
+                          name: record.name,
+                          practiceCount: record.practiceCount || 0,
+                          examScore: record.examScore || 0,
+                          totalDays: 1,
+                          completedDays: record.completed ? 1 : 0
+                        });
+                      }
+                      return acc;
+                    }, []).sort((a, b) => b.practiceCount - a.practiceCount);
+
+                    return studentRecords.slice(0, 5).map((record, index) => (
+                      <div key={index} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
+                          index === 0 ? 'bg-yellow-400 text-white' :
+                          index === 1 ? 'bg-gray-300 text-white' :
+                          index === 2 ? 'bg-orange-400 text-white' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{record.name}</p>
+                          <p className="text-sm text-gray-500">
+                            练习{record.practiceCount}次 · 平均分{record.examScore > 0 ? record.examScore : 0}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`font-bold ${record.completedDays >= 4 ? 'text-success' : 'text-gray-600'}`}>
+                            {record.completedDays}/{record.totalDays}天
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <p className="font-medium text-gray-800">{record.name}</p>
-                        <p className="text-sm text-gray-500">
-                          练习{record.totalPracticeCount}次 · 平均分{Math.round(record.averageScore)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className={`font-bold ${record.completedDays >= 4 ? 'text-success' : 'text-gray-600'}`}>
-                          {record.completedDays}/4天
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    ));
+                  })()}
                 </div>
               </div>
             </div>
@@ -452,31 +473,41 @@ export const Admin = () => {
           <div className="card">
             <h2 className="text-xl font-bold text-gray-800 mb-6">学习记录详情</h2>
             <div className="space-y-6">
-              {records.map(record => (
-                <div key={record._id} className="border border-gray-200 rounded-xl overflow-hidden">
+              {records.reduce((acc, record) => {
+                const existing = acc.find(a => a.name === record.name);
+                if (existing) {
+                  existing.days.push(record);
+                } else {
+                  acc.push({ name: record.name, days: [record] });
+                }
+                return acc;
+              }, []).map((group, idx) => (
+                <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="p-4 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
                         <Users className="w-6 h-6 text-primary-600" />
                       </div>
                       <div>
-                        <span className="font-bold text-gray-800">{record.name}</span>
+                        <span className="font-bold text-gray-800">{group.name}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-center">
-                        <p className="text-2xl font-bold text-primary-600">{record.totalPracticeCount}</p>
+                        <p className="text-2xl font-bold text-primary-600">
+                          {group.days.reduce((sum, d) => sum + (d.practiceCount || 0), 0)}
+                        </p>
                         <p className="text-xs text-gray-500">总练习次数</p>
                       </div>
                       <div className="text-center">
-                        <p className={`text-2xl font-bold ${Math.round(record.averageScore) >= 60 ? 'text-success' : 'text-warning'}`}>
-                          {Math.round(record.averageScore)}
+                        <p className={`text-2xl font-bold ${Math.round(group.days.reduce((sum, d) => sum + (d.examScore || 0), 0) / group.days.length) >= 60 ? 'text-success' : 'text-warning'}`}>
+                          {Math.round(group.days.reduce((sum, d) => sum + (d.examScore || 0), 0) / group.days.length)}
                         </p>
                         <p className="text-xs text-gray-500">平均成绩</p>
                       </div>
                       <div className="text-center">
-                        <p className={`text-2xl font-bold ${record.completedDays >= 4 ? 'text-success' : 'text-gray-600'}`}>
-                          {record.completedDays}/4
+                        <p className={`text-2xl font-bold ${group.days.filter(d => d.completed).length >= 4 ? 'text-success' : 'text-gray-600'}`}>
+                          {group.days.filter(d => d.completed).length}/4
                         </p>
                         <p className="text-xs text-gray-500">完成天数</p>
                       </div>
@@ -485,7 +516,7 @@ export const Admin = () => {
                   <div className="p-4">
                     <div className="grid grid-cols-4 gap-4">
                       {[1, 2, 3, 4].map(day => {
-                        const dayRecord = record.records.find(r => r.day === day);
+                        const dayRecord = group.days.find(d => d.day === day);
                         return (
                           <div key={day} className={`p-3 rounded-lg ${dayRecord?.completed ? 'bg-success/10 border border-success/30' : 'bg-gray-100'}`}>
                             <div className="flex items-center justify-between mb-2">

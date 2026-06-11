@@ -24,6 +24,9 @@ export const Practice = () => {
         if (response.success) {
           setQuestions(response.data);
           if (response.meta) setMeta(response.meta);
+          console.log('获取题目成功:', dayNum, '题目数量:', response.data.length, 'meta:', response.meta);
+        } else {
+          console.log('获取题目失败:', response);
         }
       } catch (error) {
         console.error('获取题目失败:', error);
@@ -45,6 +48,8 @@ export const Practice = () => {
       return;
     }
 
+    console.log('开始提交练习:', dayNum, '题目数量:', questions.length, '答案数量:', Object.keys(answers).length);
+    
     setSubmitting(true);
     try {
       const practiceAnswers: PracticeAnswer[] = questions.map(q => ({
@@ -52,7 +57,11 @@ export const Practice = () => {
         answer: answers[q.id],
       }));
 
+      console.log('提交的数据:', practiceAnswers);
+      
       const response = await submitPractice(dayNum, practiceAnswers);
+      console.log('提交响应:', response);
+      
       if (response.success) {
         setResult(response.data);
         setSubmitted(true);
@@ -212,11 +221,24 @@ export const Practice = () => {
                         key={optIndex}
                         onClick={() => handleAnswer(question.id, optIndex)}
                         disabled={submitted}
-                        className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${optionClass} ${submitted ? 'cursor-default' : 'cursor-pointer'}`}
+                        className={`w-full p-4 text-left rounded-lg border-2 transition-all duration-200 ${optionClass} ${submitted ? 'cursor-default' : 'cursor-pointer'} ${!submitted && !isSelected ? 'hover:border-primary-300' : ''}`}
                       >
-                        <span className="font-medium text-gray-700">
-                          {String.fromCharCode(65 + optIndex)}. {option}
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                            isSelected 
+                              ? 'border-primary-500 bg-primary-500' 
+                              : 'border-gray-300'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </span>
+                          <span className="font-medium text-gray-700">
+                            {String.fromCharCode(65 + optIndex)}. {option}
+                          </span>
+                        </div>
                       </button>
                     );
                   })}
@@ -228,7 +250,11 @@ export const Practice = () => {
                       <p className={`font-medium ${isCorrect ? 'text-success' : 'text-danger'}`}>
                         {isCorrect ? '回答正确！' : `回答错误，正确答案是${String.fromCharCode(65 + question.answer)}`}
                       </p>
-                      <p className="text-sm text-gray-600 mt-1">{question.explanation}</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {question.explanation && question.explanation.trim() && question.explanation !== '无' 
+                          ? question.explanation 
+                          : '暂无解析'}
+                      </p>
                     </div>
                   </div>
                 )}

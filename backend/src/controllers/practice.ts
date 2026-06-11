@@ -12,26 +12,15 @@ interface Question {
   explanation: string;
 }
 
-function shuffleOptions(options: string[], seed: number): { options: string[]; newAnswerIndex: number } {
-  const shuffled = [...options];
-  let s = seed;
-  const random = () => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return { options: shuffled, newAnswerIndex: -1 };
-}
-
 export const submitPractice = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { day, answers } = req.body;
 
+    console.log('收到练习提交请求:', { userId, day, answersCount: answers?.length });
+
     if (!userId || !day || !answers || !Array.isArray(answers)) {
+      console.log('参数验证失败:', { userId, day, answers: answers?.length });
       return res.status(400).json({ success: false, message: '参数错误' });
     }
 
@@ -61,15 +50,11 @@ export const submitPractice = async (req: AuthRequest, res: Response) => {
         const results = answers.map((answer: { questionId: string; answer: number }) => {
           const question = groupQuestions.find(q => q.id.toString() === answer.questionId);
           if (!question) return null;
-          
-          const options = JSON.parse(question.options);
-          const seed = parseInt(question.id.toString());
-          const { options: shuffledOptions } = shuffleOptions(options, seed);
-          
+
           const userAnswerIndex = answer.answer;
-          const correctAnswerIndex = shuffledOptions.indexOf(options[question.answer]);
+          const correctAnswerIndex = question.answer;
           const isCorrect = userAnswerIndex === correctAnswerIndex;
-          
+
           if (isCorrect) correctCount++;
           return {
             questionId: question.id.toString(),
@@ -108,6 +93,7 @@ export const submitPractice = async (req: AuthRequest, res: Response) => {
               groupIndex,
               canStartExam: groupIndex >= 3,
               hasMoreQuestions: true,
+              results: results,
               message: `第${groupIndex}组练习完成，答对 ${correctCount}/${total} 题，得分 ${score} 分`,
             },
           });

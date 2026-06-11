@@ -73,6 +73,7 @@ export const submitExam = async (req: AuthRequest, res: Response) => {
             correct: correctCount,
             score,
             passed,
+            results: results,
             message: passed ? `通过考核，得分 ${score} 分` : `未通过，得分 ${score} 分，需要达到 60 分`,
           },
         });

@@ -44,9 +44,10 @@ export const getRecords = async (req: AuthRequest, res: Response) => {
 export const getAllRecords = async (req: AuthRequest, res: Response) => {
   try {
     db.all(`
-      SELECT u.name, r.day, r.practiceCount, r.examScore, r.completed, r.updatedAt
+      SELECT u.name, u.role, r.day, r.practiceCount, r.practiceGroups, r.examScore, r.completed, r.updatedAt
       FROM learning_records r
       JOIN users u ON r.userId = u.id
+      WHERE u.role = 'student'
       ORDER BY u.name, r.day
     `, (err, rows: any[]) => {
       if (err) {
@@ -57,8 +58,10 @@ export const getAllRecords = async (req: AuthRequest, res: Response) => {
         success: true,
         data: rows.map(row => ({
           name: row.name,
+          role: row.role,
           day: row.day,
           practiceCount: row.practiceCount,
+          practiceGroups: row.practiceGroups || 0,
           examScore: row.examScore,
           completed: row.completed === 1,
           updatedAt: row.updatedAt,
